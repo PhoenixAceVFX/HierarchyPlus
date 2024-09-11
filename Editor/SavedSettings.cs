@@ -6,41 +6,41 @@ using System.Text;
 using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
-using static DreadScripts.HierarchyPlus.StylesContainer;
-using static DreadScripts.HierarchyPlus.ContentContainer;
+using static Editor.GUI.StylesContainer;
+using static Editor.GUI.ContentContainer;
 
-namespace DreadScripts.HierarchyPlus
+namespace Editor
 {
 	[Serializable]
 
 	internal class SavedSettings
 	{
-		internal static SavedSettings settings => data;
+		internal static SavedSettings Settings => Data;
 
 		private const string PrefsKey = "HierarchyPlusSettingsJSON";
 
 		#region Main
 
-		private static bool saveDisabled;
+		private static bool _saveDisabled;
 		private static bool _pendingSave;
 		private static bool _savePaused;
 		private static SavedSettings _data;
 
-		internal static bool savePaused
+		internal static bool SavePaused
 		{
 			get => _savePaused;
 			set
 			{
-				bool wasPaused = _savePaused;
+				var wasPaused = _savePaused;
 				_savePaused = value;
 
 				if (wasPaused && !_savePaused && _pendingSave) Save();
 			}
 		}
 
-		internal static Action onClear;
+		internal static Action OnClear;
 
-		internal static SavedSettings data
+		internal static SavedSettings Data
 		{
 			get
 			{
@@ -55,13 +55,13 @@ namespace DreadScripts.HierarchyPlus
 		internal static void Save()
 		{
 			_pendingSave = false;
-			if (savePaused) _pendingSave = true;
-			else if (!saveDisabled)
+			if (SavePaused) _pendingSave = true;
+			else if (!_saveDisabled)
 			{
-				StringBuilder dataBuilder = new StringBuilder($"MAIN[{JsonUtility.ToJson(data)}]\u200B\u200B\u200B");
+				var dataBuilder = new StringBuilder($"MAIN[{JsonUtility.ToJson(Data)}]\u200B\u200B\u200B");
 
-				string rawData = dataBuilder.ToString();
-				string compressedData = CompressString(rawData);
+				var rawData = dataBuilder.ToString();
+				var compressedData = CompressString(rawData);
 				EditorPrefs.SetString(PrefsKey, compressedData);
 			}
 		}
@@ -70,29 +70,28 @@ namespace DreadScripts.HierarchyPlus
 		{
 			try
 			{
-				string fullData = string.Empty;
-				fullData = EditorPrefs.GetString(PrefsKey, string.Empty);
+				var fullData = EditorPrefs.GetString(PrefsKey, string.Empty);
 				if (!string.IsNullOrWhiteSpace(fullData))
 					fullData = DecompressString(fullData);
 
-				Dictionary<string, string> dataDictionary = new Dictionary<string, string>();
+				var dataDictionary = new Dictionary<string, string>();
 
 				if (!string.IsNullOrEmpty(fullData))
 				{
 					var matches = Regex.Matches(fullData, @"(\w+)\[(.*?)\]\u200B\u200B\u200B");
-					for (int i = 0; i < matches.Count; i++)
+					for (var i = 0; i < matches.Count; i++)
 					{
 						var m = matches[i];
 						dataDictionary.Add(m.Groups[1].Value, m.Groups[2].Value);
 					}
 				}
 
-				if (dataDictionary.TryGetValue("MAIN", out string mainJson))
+				if (dataDictionary.TryGetValue("MAIN", out var mainJson))
 				{
 					_data = JsonUtility.FromJson<SavedSettings>(mainJson);
 				}
 
-				if (_data == null) _data = new SavedSettings();
+				_data ??= new SavedSettings();
 			}
 			catch (Exception ex)
 			{
@@ -109,13 +108,13 @@ namespace DreadScripts.HierarchyPlus
 		internal static void Clear()
 		{
 			_data = new SavedSettings();
-			onClear?.Invoke();
+			OnClear?.Invoke();
 			Save();
 		}
 
 		private static string CompressString(string text)
 		{
-			byte[] buffer = Encoding.UTF8.GetBytes(text);
+			var buffer = Encoding.UTF8.GetBytes(text);
 			var memoryStream = new MemoryStream();
 			using (var gZipStream = new GZipStream(memoryStream, CompressionMode.Compress, true))
 			{
@@ -135,70 +134,67 @@ namespace DreadScripts.HierarchyPlus
 
 		private static string DecompressString(string compressedText)
 		{
-			byte[] gZipBuffer = Convert.FromBase64String(compressedText);
-			using (var memoryStream = new MemoryStream())
+			var gZipBuffer = Convert.FromBase64String(compressedText);
+			using var memoryStream = new MemoryStream();
+			var dataLength = BitConverter.ToInt32(gZipBuffer, 0);
+			memoryStream.Write(gZipBuffer, 4, gZipBuffer.Length - 4);
+
+			var buffer = new byte[dataLength];
+
+			memoryStream.Position = 0;
+			using (var gZipStream = new GZipStream(memoryStream, CompressionMode.Decompress))
 			{
-				int dataLength = BitConverter.ToInt32(gZipBuffer, 0);
-				memoryStream.Write(gZipBuffer, 4, gZipBuffer.Length - 4);
-
-				var buffer = new byte[dataLength];
-
-				memoryStream.Position = 0;
-				using (var gZipStream = new GZipStream(memoryStream, CompressionMode.Decompress))
-				{
-					gZipStream.Read(buffer, 0, buffer.Length);
-				}
-
-				return Encoding.UTF8.GetString(buffer);
+				gZipStream.Read(buffer, 0, buffer.Length);
 			}
+
+			return Encoding.UTF8.GetString(buffer);
 		}
 
 		#endregion
 
 		internal class SaveOnChange : IDisposable
 		{
-			private readonly Action OnChange;
-			private readonly bool wasPaused;
-			private readonly EditorGUI.ChangeCheckScope changeScope;
-			internal bool changed => changeScope.changed;
+			private readonly Action _onChange;
+			private readonly bool _wasPaused;
+			private readonly EditorGUI.ChangeCheckScope _changeScope;
 
-			public SaveOnChange(Action OnChange = null)
+			public SaveOnChange(Action onChange = null)
 			{
-				this.OnChange = OnChange;
-				wasPaused = savePaused;
-				savePaused = true;
-				changeScope = new EditorGUI.ChangeCheckScope();
+				_onChange = onChange;
+				_wasPaused = SavePaused;
+				SavePaused = true;
+				_changeScope = new EditorGUI.ChangeCheckScope();
 			}
 
 			public void Dispose()
 			{
-				bool hasChanged = changeScope.changed;
-				changeScope.Dispose();
+				var hasChanged = _changeScope.changed;
+				_changeScope.Dispose();
 				if (hasChanged)
 				{
-					OnChange?.Invoke();
+					_onChange?.Invoke();
 					Save();
 				}
 
-				savePaused = wasPaused;
+				SavePaused = _wasPaused;
 			}
 
-			public static implicit operator bool(SaveOnChange soc) => soc.changeScope.changed;
+			public static implicit operator bool(SaveOnChange soc) => soc._changeScope.changed;
 		}
 
 		internal class SavePauseScope : IDisposable
 		{
-			private readonly bool wasPaused;
+			private readonly bool _wasPaused;
 
 			public SavePauseScope()
 			{
-				wasPaused = savePaused;
-				savePaused = true;
+				_wasPaused = SavePaused;
+				SavePaused = true;
 			}
 
 			public void Dispose()
 			{
-				savePaused = wasPaused;
+				SavePaused = _wasPaused;
 			}
 		}
 
@@ -212,7 +208,7 @@ namespace DreadScripts.HierarchyPlus
 			[SerializeField] private bool _value;
 			internal readonly Action OnChanged;
 
-			internal bool value
+			internal bool Value
 			{
 				get => _value;
 				set
@@ -224,14 +220,14 @@ namespace DreadScripts.HierarchyPlus
 				}
 			}
 
-			internal SavedBool(bool defaultValue, Action OnChangedCallback = null)
+			internal SavedBool(bool defaultValue, Action onChangedCallback = null)
 			{
-				this.defaultValue = defaultValue;
+				this.DefaultValue = defaultValue;
 				_value = defaultValue;
-				OnChanged = OnChangedCallback;
+				OnChanged = onChangedCallback;
 			}
 
-			internal void Toggle() => value = !_value;
+			internal void Toggle() => Value = !_value;
 
 			internal void DrawField(string label, GUIStyle style = null, params GUILayoutOption[] options)
 				=> DrawField(new GUIContent(label), style, options);
@@ -239,8 +235,7 @@ namespace DreadScripts.HierarchyPlus
 
 			internal void DrawField(GUIContent label, GUIStyle style = null, params GUILayoutOption[] options)
 			{
-				if (style == null) value = EditorGUILayout.Toggle(label, value, options);
-				else value = EditorGUILayout.Toggle(label, value, style, options);
+				Value = style == null ? EditorGUILayout.Toggle(label, Value, options) : EditorGUILayout.Toggle(label, Value, style, options);
 			}
 
 			internal void DrawToggle(string activeLabel, string inactiveLabel = null, GUIStyle style = null, Color? activeColor = null, Color? inactiveColor = null, params GUILayoutOption[] options)
@@ -248,12 +243,12 @@ namespace DreadScripts.HierarchyPlus
 
 			internal void DrawToggle(GUIContent activeLabel, GUIContent inactiveLabel = null, GUIStyle style = null, Color? activeColor = null, Color? inactiveColor = null, params GUILayoutOption[] options)
 			{
-				activeColor = activeColor ?? GUI.backgroundColor;
-				inactiveColor = inactiveColor ?? GUI.backgroundColor;
-				Color ogColor = GUI.backgroundColor;
-				GUI.backgroundColor = value ? (Color) activeColor : (Color) inactiveColor;
-				value = GUILayout.Toggle(value, value || inactiveLabel == null ? activeLabel : inactiveLabel, style == null ? GUI.skin.button : style, options);
-				GUI.backgroundColor = ogColor;
+				activeColor ??= UnityEngine.GUI.backgroundColor;
+				inactiveColor ??= UnityEngine.GUI.backgroundColor;
+				var ogColor = UnityEngine.GUI.backgroundColor;
+				UnityEngine.GUI.backgroundColor = Value ? (Color) activeColor : (Color) inactiveColor;
+				Value = GUILayout.Toggle(Value, Value || inactiveLabel == null ? activeLabel : inactiveLabel, style ?? UnityEngine.GUI.skin.button, options);
+				UnityEngine.GUI.backgroundColor = ogColor;
 			}
 
 			internal bool DrawFoldout(string label) => DrawFoldout(new GUIContent(label));
@@ -261,11 +256,10 @@ namespace DreadScripts.HierarchyPlus
 			internal bool DrawFoldout(GUIContent label)
 			{
 				return _value = EditorGUILayout.Foldout(_value, label);
-				;
 			}
 
 			public static implicit operator bool(SavedBool s) => s._value;
-			internal override void Reset() => value = (bool) defaultValue;
+			internal virtual void Reset() => Value = (bool) DefaultValue;
 
 		}
 
@@ -276,28 +270,26 @@ namespace DreadScripts.HierarchyPlus
 			[SerializeField] private float _value;
 			internal readonly Action OnChanged;
 
-			internal float value
+			internal float Value
 			{
 				get => _value;
 				set
 				{
-					if (_value != value)
-					{
-						_value = value;
-						OnChanged?.Invoke();
-						Save();
-					}
+					if (Mathf.Approximately(_value, value)) return;
+					_value = value;
+					OnChanged?.Invoke();
+					Save();
 				}
 			}
 
-			internal SavedFloat(float defaultValue, Action OnChangedCallback = null)
+			internal SavedFloat(float defaultValue, Action onChangedCallback = null)
 			{
-				this.defaultValue = defaultValue;
+				this.DefaultValue = defaultValue;
 				_value = defaultValue;
-				OnChanged = OnChangedCallback;
+				OnChanged = onChangedCallback;
 			}
 
-			internal override void Reset() => value = (float) defaultValue;
+			internal virtual void Reset() => Value = (float) DefaultValue;
 
 			public static implicit operator int(SavedFloat s) => (int) s._value;
 			public static implicit operator float(SavedFloat s) => s._value;
@@ -309,36 +301,34 @@ namespace DreadScripts.HierarchyPlus
 			[SerializeField] private string _value;
 			internal readonly Action OnChanged;
 
-			internal string value
+			internal string Value
 			{
 				get => _value;
 				set
 				{
-					if (_value != value)
-					{
-						_value = value;
-						OnChanged?.Invoke();
-						Save();
-					}
+					if (_value == value) return;
+					_value = value;
+					OnChanged?.Invoke();
+					Save();
 				}
 			}
 
-			internal SavedString(string defaultValue = "", Action OnChangedCallback = null)
+			internal SavedString(string defaultValue = "", Action onChangedCallback = null)
 			{
-				this.defaultValue = defaultValue;
+				this.DefaultValue = defaultValue;
 				_value = defaultValue;
-				OnChanged = OnChangedCallback;
+				OnChanged = onChangedCallback;
 			}
 
-			internal override void Reset() => value = (string) defaultValue;
+			internal virtual void Reset() => Value = (string) DefaultValue;
 
-			public override string ToString() => value;
+			public override string ToString() => Value;
 
-			public void DrawField(string label, GUIStyle style = null, params GUILayoutOption[] options) => DrawField(new GUIContent(label), style, options);
+			public void DrawField(string label, GUIStyle style = null, params GUILayoutOption[] options) => DrawField(new GUIContent(label));
 
-			public void DrawField(GUIContent label, GUIStyle style = null, params GUILayoutOption[] options)
+			public void DrawField(GUIContent label)
 			{
-				value = EditorGUILayout.DelayedTextField(label, value);
+				Value = EditorGUILayout.DelayedTextField(label, Value);
 			}
 
 			public static implicit operator string(SavedString s) => s._value;
@@ -354,9 +344,9 @@ namespace DreadScripts.HierarchyPlus
 			[SerializeField] private float b;
 			[SerializeField] private float a;
 
-			internal Color color
+			internal Color Color
 			{
-				get => new Color(r, g, b, a);
+				get => new(r, g, b, a);
 				set
 				{
 					r = value.r;
@@ -368,25 +358,25 @@ namespace DreadScripts.HierarchyPlus
 				}
 			}
 
-			internal SavedColor(float r, float g, float b, float a = 1, Action OnChangedCallback = null)
+			internal SavedColor(float r, float g, float b, float a = 1, Action onChangedCallback = null)
 			{
-				Color def = new Color(r, g, b, a);
-				defaultValue = def;
+				var def = new Color(r, g, b, a);
+				DefaultValue = def;
 				this.r = r;
 				this.g = g;
 				this.b = b;
 				this.a = a;
-				OnChanged = OnChangedCallback;
+				OnChanged = onChangedCallback;
 			}
 
-			internal SavedColor(Color defaultColor, Action OnChangedCallback = null)
+			internal SavedColor(Color defaultColor, Action onChangedCallback = null)
 			{
-				this.defaultValue = defaultColor;
+				DefaultValue = defaultColor;
 				r = defaultColor.r;
 				g = defaultColor.g;
 				b = defaultColor.b;
 				a = defaultColor.a;
-				OnChanged = OnChangedCallback;
+				OnChanged = onChangedCallback;
 			}
 
 			internal void DrawField(string label, bool drawReset = true, params GUILayoutOption[] options)
@@ -398,24 +388,23 @@ namespace DreadScripts.HierarchyPlus
 			{
 				using (new GUILayout.HorizontalScope())
 				{
-					color = EditorGUILayout.ColorField(label, color, options);
+					Color = EditorGUILayout.ColorField(label, Color, options);
 					if (!drawReset) return;
-					if (GUILayout.Button(Content.resetIcon, Styles.labelButton, GUILayout.Width(18), GUILayout.Height(18)))
+					if (GUILayout.Button(Content.ResetIcon, Styles.LabelButton, GUILayout.Width(18), GUILayout.Height(18)))
 						Reset();
 					HierarchyPlus.MakeRectLinkCursor();
 				}
 			}
 
-			internal override void Reset() => color = (Color) defaultValue;
+			internal virtual void Reset() => Color = (Color) DefaultValue;
 
-			public static implicit operator Color(SavedColor s) => s.color;
+			public static implicit operator Color(SavedColor s) => s.Color;
 		}
 
 
 		internal abstract class SavedValue
 		{
-			internal object defaultValue;
-			internal abstract void Reset();
+			internal object DefaultValue;
 		}
 
 
@@ -425,57 +414,57 @@ namespace DreadScripts.HierarchyPlus
 		#region Saved Data
 
 		[SerializeField] internal SavedString[]
-			hiddenIconTypes = {new SavedString("MeshFilter")};
+			hiddenIconTypes = {new("MeshFilter")};
 
 		[SerializeField] internal SavedColor
-			rowOddColor = new SavedColor(new Color(0.5f, 0.5f, 1, 0.07f)),
-			rowEvenColor = new SavedColor(new Color(0, 0, 0, 0.07f)),
-			colorOne = new SavedColor(Color.white),
-			colorTwo = new SavedColor(Color.white),
-			colorThree = new SavedColor(Color.white),
-			guideLinesColor = new SavedColor(Color.white),
-			iconTintColor = new SavedColor(Color.white),
-			iconFadedTintColor = new SavedColor(new Color(1, 1, 1, 0.5f)),
-			iconBackgroundColor = new SavedColor(new Color(0.22f, 0.22f, 0.22f));
+			rowOddColor = new(new Color(0.5f, 0.5f, 1, 0.07f)),
+			rowEvenColor = new(new Color(0, 0, 0, 0.07f)),
+			colorOne = new(Color.white),
+			colorTwo = new(Color.white),
+			colorThree = new(Color.white),
+			guideLinesColor = new(Color.white),
+			iconTintColor = new(Color.white),
+			iconFadedTintColor = new(new Color(1, 1, 1, 0.5f)),
+			iconBackgroundColor = new(new Color(0.22f, 0.22f, 0.22f));
 
 		[SerializeField] internal SavedBool
-			enabled = new SavedBool(true),
-			colorsEnabled = new SavedBool(true),
-			iconsEnabled = new SavedBool(true),
-			enableContextClick = new SavedBool(true),
-			enableDragToggle = new SavedBool(true),
-			colorOneEnabled = new SavedBool(false),
-			colorTwoEnabled = new SavedBool(false),
-			colorThreeEnabled = new SavedBool(false),
-			guideLinesEnabled = new SavedBool(true),
-			rowColoringOddEnabled = new SavedBool(false),
-			rowColoringEvenEnabled = new SavedBool(true),
-			showGameObjectIcon = new SavedBool(true),
-			useCustomGameObjectIcon = new SavedBool(true),
-			showTransformIcon = new SavedBool(false),
-			showNonBehaviourIcons = new SavedBool(true),
-			linkCursorOnHover = new SavedBool(false),
-			alwaysShowIcons = new SavedBool(false),
-			iconBackgroundColorEnabled = new SavedBool(true),
-			iconBackgroundOverlapOnly = new SavedBool(true),
-			labelsEnabled = new SavedBool(true),
-			enableLabelContextClick = new SavedBool(true),
-			tagLabelEnabled = new SavedBool(true),
-			displayUntaggedLabel = new SavedBool(false),
-			layerLabelEnabled = new SavedBool(true),
-			displayLayerIndex = new SavedBool(false),
-			displayDefaultLayerLabel = new SavedBool(false);
+			enabled = new(true),
+			colorsEnabled = new(true),
+			iconsEnabled = new(true),
+			enableContextClick = new(true),
+			enableDragToggle = new(true),
+			colorOneEnabled = new(false),
+			colorTwoEnabled = new(false),
+			colorThreeEnabled = new(false),
+			guideLinesEnabled = new(true),
+			rowColoringOddEnabled = new(false),
+			rowColoringEvenEnabled = new(true),
+			showGameObjectIcon = new(true),
+			useCustomGameObjectIcon = new(true),
+			showTransformIcon = new(false),
+			showNonBehaviourIcons = new(true),
+			linkCursorOnHover = new(false),
+			alwaysShowIcons = new(false),
+			iconBackgroundColorEnabled = new(true),
+			iconBackgroundOverlapOnly = new(true),
+			labelsEnabled = new(true),
+			enableLabelContextClick = new(true),
+			tagLabelEnabled = new(true),
+			displayUntaggedLabel = new(false),
+			layerLabelEnabled = new(true),
+			displayLayerIndex = new(false),
+			displayDefaultLayerLabel = new(false);
 
 		[SerializeField] internal SavedFloat
-			guiXOffset = new SavedFloat(0),
-			tagLabelWidth = new SavedFloat(75),
-			layerLabelWidth = new SavedFloat(75);
+			guiXOffset = new(0),
+			tagLabelWidth = new(75),
+			layerLabelWidth = new(75);
 
 		#endregion
 
 		internal bool GetColorsEnabled() => enabled && colorsEnabled;
 		internal bool GetIconsEnabled() => enabled && iconsEnabled;
 		internal bool GetLabelsEnabled() => enabled && labelsEnabled;
-		internal bool GetRowColoringEnabled() => (rowColoringOddEnabled || rowColoringEvenEnabled);
+		internal bool GetRowColoringEnabled() => rowColoringOddEnabled || rowColoringEvenEnabled;
 	}
 }

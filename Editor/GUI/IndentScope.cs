@@ -1,7 +1,7 @@
 ﻿using System;
 using UnityEngine;
 
-namespace DreadScripts.HierarchyPlus
+namespace Editor.GUI
 {
 	internal sealed class IndentScope : IDisposable
 	{

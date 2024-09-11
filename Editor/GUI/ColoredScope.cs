@@ -1,83 +1,73 @@
 ﻿using System;
 using UnityEngine;
 
-namespace DreadScripts.HierarchyPlus
+namespace Editor.GUI
 {
 	internal sealed class ColoredScope : IDisposable
 	{
 		internal enum ColoringType
 		{
-			BG = 1 << 0,
-			FG = 1 << 1,
+			Bg = 1 << 0,
+			Fg = 1 << 1,
 			General = 1 << 2,
-			All = BG | FG | General
+			All = Bg | Fg | General
 		}
 
-		private readonly Color[] ogColors = new Color[3];
-		private readonly ColoringType coloringType;
-		private bool changedAnyColor;
+		private readonly Color[] _ogColors = new Color[3];
+		private readonly ColoringType _coloringType;
+		private bool _changedAnyColor;
 
 		private void MemorizeColor()
 		{
-			changedAnyColor = true;
-			ogColors[0] = GUI.backgroundColor;
-			ogColors[1] = GUI.contentColor;
-			ogColors[2] = GUI.color;
+			_changedAnyColor = true;
+			_ogColors[0] = UnityEngine.GUI.backgroundColor;
+			_ogColors[1] = UnityEngine.GUI.contentColor;
+			_ogColors[2] = UnityEngine.GUI.color;
 		}
 
 		private void SetColors(Color color)
 		{
 			MemorizeColor();
 
-			if (coloringType.HasFlag(ColoringType.BG))
-				GUI.backgroundColor = color;
+			if (_coloringType.HasFlag(ColoringType.Bg))
+				UnityEngine.GUI.backgroundColor = color;
 
-			if (coloringType.HasFlag(ColoringType.FG))
-				GUI.contentColor = color;
+			if (_coloringType.HasFlag(ColoringType.Fg))
+				UnityEngine.GUI.contentColor = color;
 
-			if (coloringType.HasFlag(ColoringType.General))
-				GUI.color = color;
+			if (_coloringType.HasFlag(ColoringType.General))
+				UnityEngine.GUI.color = color;
 		}
 
 		internal ColoredScope(ColoringType type, Color color)
 		{
-			coloringType = type;
+			_coloringType = type;
 			SetColors(color);
 		}
 
 		internal ColoredScope(ColoringType type, bool isActive, Color color)
 		{
-			coloringType = type;
+			_coloringType = type;
 			if (isActive) SetColors(color);
 
 		}
 
 		internal ColoredScope(ColoringType type, bool isActive, Color active, Color inactive)
 		{
-			coloringType = type;
+			_coloringType = type;
 			SetColors(isActive ? active : inactive);
-		}
-
-		internal ColoredScope(ColoringType type, int selectedIndex, params Color[] colors)
-		{
-			coloringType = type;
-			if (selectedIndex >= 0)
-			{
-				MemorizeColor();
-				SetColors(colors[selectedIndex]);
-			}
 		}
 
 		public void Dispose()
 		{
-			if (!changedAnyColor) return;
+			if (!_changedAnyColor) return;
 
-			if (coloringType.HasFlag(ColoringType.BG))
-				GUI.backgroundColor = ogColors[0];
-			if (coloringType.HasFlag(ColoringType.FG))
-				GUI.contentColor = ogColors[1];
-			if (coloringType.HasFlag(ColoringType.General))
-				GUI.color = ogColors[2];
+			if (_coloringType.HasFlag(ColoringType.Bg))
+				UnityEngine.GUI.backgroundColor = _ogColors[0];
+			if (_coloringType.HasFlag(ColoringType.Fg))
+				UnityEngine.GUI.contentColor = _ogColors[1];
+			if (_coloringType.HasFlag(ColoringType.General))
+				UnityEngine.GUI.color = _ogColors[2];
 
 
 		}
